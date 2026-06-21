@@ -3,8 +3,15 @@ package main
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	pongTimeout  = 60 * time.Second
+	pingInterval = (pongTimeout * 9) / 10
+	writeTimeout = 10 * time.Second
 )
 
 type Hub struct {
@@ -53,6 +60,11 @@ func (h *Hub) Run() {
 	for msg := range h.broadcast {
 		clients := h.getSnapshot()
 		for _, client := range clients {
+			err := client.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err != nil {
+				log.Printf("write deadline exceed: %s", err)
+				h.UnRegister(client)
+			}
 			if err := client.WriteMessage(websocket.TextMessage, msg); err != nil {
 				log.Printf("writing message: %s", err)
 				h.UnRegister(client)
