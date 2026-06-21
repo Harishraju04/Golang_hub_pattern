@@ -21,15 +21,15 @@ func wsHandler(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Printf("upgrading request: %s", err)
 		return
 	}
-	hub.Register(conn)
-	go handleConnection(hub, conn)
+	client := hub.Register(conn)
+	go handleConnection(hub, client)
 }
 
-func handleConnection(h *Hub, conn *websocket.Conn) {
+func handleConnection(h *Hub, client *Client) {
+	conn := client.conn
 	defer h.UnRegister(conn)
-	err := conn.SetReadDeadline(time.Now().Add(pongTimeout))
-	if err != nil {
-		log.Printf("Readlind exceed: %s", err)
+	if err := conn.SetReadDeadline(time.Now().Add(pongTimeout)); err != nil {
+		log.Printf("Read deadline exceed: %s", err)
 		return
 	}
 	conn.SetPongHandler(func(string) error {
@@ -37,7 +37,7 @@ func handleConnection(h *Hub, conn *websocket.Conn) {
 		return nil
 	})
 
-	go pingLoop(h, conn)
+	go pingLoop(h, client)
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -45,14 +45,20 @@ func handleConnection(h *Hub, conn *websocket.Conn) {
 			log.Printf("reading message: %s", err)
 			return
 		}
+		client.updateLastMessage()
+		conn.SetReadDeadline(time.Now().Add(pongTimeout))
 		h.Broadcast(msg)
 	}
 }
 
-func pingLoop(h *Hub, conn *websocket.Conn) {
-	ticker := time.NewTicker(pingInterval)
+func pingLoop(h *Hub, client *Client) {
+	ticker := time.NewTicker(checkInterval)
+	conn := client.conn
 	defer ticker.Stop()
 	for range ticker.C {
+		if !client.isIdle(idelTreshold) {
+			continue
+		}
 		err := conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 		if err != nil {
 			log.Printf("ping write timeout: ;%s", err)

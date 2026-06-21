@@ -9,28 +9,31 @@ import (
 )
 
 const (
-	pongTimeout  = 60 * time.Second
-	pingInterval = (pongTimeout * 9) / 10
-	writeTimeout = 10 * time.Second
+	writeTimeout  = 10 * time.Second
+	pongTimeout   = 60 * time.Second
+	idelTreshold  = 30 * time.Second
+	checkInterval = 10 * time.Second
 )
 
 type Hub struct {
-	clients   map[*websocket.Conn]bool
+	clients   map[*websocket.Conn]*Client
 	mutex     sync.RWMutex
 	broadcast chan []byte
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:   make(map[*websocket.Conn]bool),
+		clients:   make(map[*websocket.Conn]*Client),
 		broadcast: make(chan []byte),
 	}
 }
 
-func (h *Hub) Register(conn *websocket.Conn) {
+func (h *Hub) Register(conn *websocket.Conn) *Client {
+	client := &Client{conn: conn}
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
-	h.clients[conn] = true
+	h.clients[conn] = client
+	return client
 }
 
 func (h *Hub) UnRegister(conn *websocket.Conn) {
